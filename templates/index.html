@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nairobi Traffic Flow Optimizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.23.0/maps/maps-web.min.js"></script>
+    <style>
+        .loader {
+            border-top-color: #3B82F6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-blue-100 min-h-screen">
+    <div id="progressOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl p-8 text-center shadow-2xl">
+            <div class="relative w-48 h-48 mx-auto mb-6">
+                <div class="absolute inset-0 border-8 border-gray-200 rounded-full"></div>
+                <div class="absolute inset-0 border-8 border-blue-500 border-t-transparent rounded-full loader"></div>
+                <div id="progressPercentage" class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-blue-600">
+                    0%
+                </div>
+            </div>
+            <p id="progressText" class="text-xl text-gray-700">Initializing...</p>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white shadow-2xl rounded-2xl overflow-hidden">
+            <div class="bg-blue-600 text-white p-6 flex justify-between items-center">
+                <h1 class="text-3xl font-bold">Nairobi Traffic Flow Optimizer</h1>
+            </div>
+
+            <div class="p-8">
+                <form id="trafficForm" class="space-y-8">
+                    <div class="mb-4 bg-gray-50 border-2 border-blue-100 rounded-lg p-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="selectAll" class="form-checkbox h-5 w-5 text-blue-600 mr-3">
+                            <span class="text-xl font-semibold">Select All Routes</span>
+                        </label>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {% for key, roads in road_points.items() %}
+                        <div class="bg-gray-50 border-2 border-blue-100 rounded-lg p-5 hover:shadow-lg transition-all">
+                            <div class="flex items-center mb-4">
+                                <input type="checkbox" id="{{ key }}" name="roads" value="{{ key }}"
+                                    class="form-checkbox h-5 w-5 text-blue-600 mr-3 road-checkbox">
+                                <label for="{{ key }}" class="text-xl font-semibold capitalize">{{ key|replace('-', ' ') }} Routes</label>
+                            </div>
+                            <ul class="list-disc list-inside text-gray-700">
+                                {% for road in roads %}
+                                <li class="text-sm mb-1">{{ road.name }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white py-4 rounded-lg hover:bg-blue-700 transition duration-300 text-xl font-semibold">
+                        Analyze Traffic Conditions
+                    </button>
+                </form>
+
+                <div id="roadResults" class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                <div id="mapContainer" class="mt-8 h-96 w-full hidden rounded-2xl shadow-lg"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Select All functionality
+    document.getElementById('selectAll').addEventListener('change', function(e) {
+        const isChecked = this.checked;
+        document.querySelectorAll('.road-checkbox').forEach(checkbox => {
+            checkbox.checked = isChecked;
+        });
+    });
+
+    document.getElementById('trafficForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const selectedRoads = Array.from(
+            document.querySelectorAll('input[name="roads"]:checked')
+        ).map(cb => cb.value);
+
+        const progressOverlay = document.getElementById('progressOverlay');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const progressText = document.getElementById('progressText');
+        const roadResultsDiv = document.getElementById('roadResults');
+
+        progressOverlay.classList.remove('hidden');
+        roadResultsDiv.innerHTML = '';
+
+        const formData = new FormData();
+        selectedRoads.forEach(road => formData.append('roads', road));
+
+        const totalRoadGroups = selectedRoads.length;
+        let processedRoadGroups = 0;
+
+        const updateProgress = (group) => {
+            processedRoadGroups++;
+            const percentage = Math.round((processedRoadGroups / totalRoadGroups) * 100);
+            progressPercentage.textContent = `${percentage}%`;
+            progressText.textContent = `Processing ${group} traffic data...`;
+        };
+
+        const roadTrafficPromises = selectedRoads.map(roadGroup => {
+            const singleRoadData = new FormData();
+            singleRoadData.append('roads', roadGroup);
+
+            return axios.post('/check_road_traffic', singleRoadData)
+                .then(response => {
+                    updateProgress(roadGroup);
+                    return { roadGroup, data: response.data[roadGroup] };
+                });
+        });
+
+        Promise.all(roadTrafficPromises)
+        .then(results => {
+            results.forEach(({ roadGroup, data }) => {
+                const roadGroupElement = document.createElement('div');
+                roadGroupElement.className = 'bg-white shadow-lg rounded-xl p-6';
+
+                roadGroupElement.innerHTML = `
+                    <h3 class="text-xl font-bold mb-4 text-blue-600 capitalize">${roadGroup.replace('-', ' ')} Traffic</h3>
+                    ${data.map(road => `
+                        <div class="mb-4 pb-4 border-b last:border-b-0">
+                            <p class="font-semibold text-gray-700 mb-2">${road.name}</p>
+                            <div class="bg-${road.congestionLevel === 'High' ? 'red' : road.congestionLevel === 'Medium' ? 'yellow' : 'green'}-100 p-4 rounded-lg">
+                                <div class="flex justify-between mb-2">
+                                    <span class="font-bold">Congestion:</span>
+                                    <span class="font-bold ${
+                                        road.congestionLevel === 'High' ? 'text-red-600' :
+                                        road.congestionLevel === 'Medium' ? 'text-yellow-600' :
+                                        'text-green-600'
+                                    }">${road.congestionLevel}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Current Speed:</span>
+                                    <span>${road.currentSpeed || 'N/A'} km/h</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                `;
+
+                roadResultsDiv.appendChild(roadGroupElement);
+            });
+
+            progressOverlay.classList.add('hidden');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            progressOverlay.classList.add('hidden');
+            roadResultsDiv.innerHTML = `
+                <div class="bg-red-100 p-6 rounded-lg col-span-full text-center">
+                    <p class="text-red-700 font-semibold">Traffic data retrieval failed. Please try again.</p>
+                </div>
+            `;
+        });
+    });
+    </script>
+</body>
+</html>

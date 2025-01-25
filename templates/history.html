@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Request History</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white shadow-md rounded-lg overflow-hidden">
+            <div class="bg-blue-600 text-white p-4 flex justify-between items-center">
+                <h1 class="text-2xl font-bold">Recent Traffic Requests</h1>
+                <a href="/" class="bg-white text-blue-600 px-4 py-2 rounded hover:bg-blue-50">
+                    Back to Traffic Monitor
+                </a>
+            </div>
+
+            <div class="p-6">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-gray-100 text-left">
+                            <th class="p-3">ID</th>
+                            <th class="p-3">Location</th>
+                            <th class="p-3">Timestamp</th>
+                            <th class="p-3">API Calls</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request in requests %}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="p-3">{{ request[0] }}</td>
+                            <td class="p-3">{{ request[1] }}</td>
+                            <td class="p-3">{{ request[2] }}</td>
+                            <td class="p-3">{{ request[3] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
